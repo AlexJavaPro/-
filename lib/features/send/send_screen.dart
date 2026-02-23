@@ -42,6 +42,8 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
   Timer? _statusAutoHideTimer;
   Timer? _automationPollTimer;
   int _lastEstimatedEmails = -1;
+  int _securityStepCounter = 0;
+  DateTime _lastSecurityStepTap = DateTime.now();
 
   @override
   void initState() {
@@ -86,6 +88,18 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
     if (!mounted) return;
     _startAutomationStatePolling();
     setState(() { _showSplashScreen = false; });
+    
+    if (_controller.pendingDraft != null && _controller.photos.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Черновик успешно загружен'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Color(0xFF1A3F8F),
+          ),
+        );
+      });
+    }
   }
 
   void _startAutomationStatePolling() {
@@ -325,6 +339,7 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
           initialPhotoSource: _controller.defaultPhotoPickSource,
           initialCompression: compressionPresetFromId(_controller.settings.compressionPreset),
           initialAutoSendEnabled: _controller.settings.autoSendEnabled,
+          initialSendOrder: _controller.sendOrderOption,
         ),
       ),
     );
@@ -342,6 +357,7 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
         photoPickSourceDefault: _photoPickSourceId(result.photoSource),
         compressionPreset: compressionPresetId(result.compression),
         autoSendEnabled: result.autoSendEnabled,
+        sendOrder: sendOrderOptionId(result.sendOrder),
       ),
     );
   }
@@ -507,568 +523,401 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
 
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-    return Scaffold(
-      backgroundColor: const Color(0xFFF2F6FF),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF1A3F8F),
-        foregroundColor: Colors.white,
-        title: const Text(
-          'Настройки отправки',
-          style: TextStyle(fontWeight: FontWeight.w700),
-        ),
-        actions: [
-          TextButton.icon(
-            onPressed: _save,
-            icon: const Icon(Icons.check, color: Colors.white),
-            label: const Text('Сохранить', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-          ),
-        ],
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+    if (_showSplashScreen) return const _SplashScreen();
+
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        return Scaffold(
+          backgroundColor: const Color(0xFFF2F6FF),
+          appBar: _buildAppBar(),
+          body: IndexedStack(
+            index: _tabIndex,
             children: [
-              const Padding(
-                padding: EdgeInsets.only(left: 4, bottom: 12),
-                child: Text('Общие', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A3060))),
-              ),
-              _buildPhotoSourceCard(),
-              const SizedBox(height: 14),
-              _buildCompressionCard(),
-              const SizedBox(height: 14),
-              _buildLimitCard(),
-
-              const SizedBox(height: 32),
-              const Padding(
-                padding: EdgeInsets.only(left: 4, bottom: 12),
-                child: Text('Способ отправки', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A3060))),
-              ),
-              _buildSendMethodCard(),
-
-              if (_selectedSendMethod == SendMethodOption.automatic) ...[
-                const SizedBox(height: 14),
-                _buildYandexAuthCard(),
-                const SizedBox(height: 14),
-                _buildAutoSendCard(),
-              ],
-
-              const SizedBox(height: 32),
-              FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: const Color(0xFF1A3F8F),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-                onPressed: _save,
-                icon: const Icon(Icons.check_circle_outline),
-                label: const Text('Сохранить настройки', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-              ),
+              _buildTabPhotos(),
+              _buildTabLettersAndCompose(),
+              _buildTabSend(),
             ],
           ),
+          bottomNavigationBar: _buildBottomNav(),
+          floatingActionButton: _tabIndex == 0 ? _buildFabPhotos() : null,
+        );
+      },
+    );
+  }
+
+  PreferredSizeWidget _buildAppBar() {
+    String title = 'ФотоПочта';
+    if (_tabIndex == 0) title = 'Фотографии';
+    if (_tabIndex == 1) title = 'Письма и данные';
+    if (_tabIndex == 2) title = 'Отправка';
+
+    return AppBar(
+      backgroundColor: const Color(0xFF1A3F8F),
+      foregroundColor: Colors.white,
+      elevation: 0,
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.settings_outlined),
+          onPressed: _openSendSettingsPage,
+          tooltip: 'Настройки',
         ),
+      ],
+    );
+  }
+
+  Widget _buildBottomNav() {
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10, offset: const Offset(0, -2))
+        ],
+      ),
+      child: BottomNavigationBar(
+        currentIndex: _tabIndex,
+        onTap: (index) => setState(() => _tabIndex = index),
+        selectedItemColor: const Color(0xFF1A3F8F),
+        unselectedItemColor: const Color(0xFF7A9ADB),
+        backgroundColor: Colors.white,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.photo_library), label: 'Фото'),
+          BottomNavigationBarItem(icon: Icon(Icons.email), label: 'Письма'),
+          BottomNavigationBarItem(icon: Icon(Icons.send), label: 'Отправка'),
+        ],
       ),
     );
   }
 
-  Widget _buildPhotoSourceCard() {
-    return _SettingGroupCard(
-      title: 'Источник добавления фото',
-      icon: Icons.photo_library_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: PhotoPickSource.values.map((source) {
-          final selected = _selectedPhotoSource == source;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedPhotoSource = source),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFFEEF4FF) : const Color(0xFFF8FBFF),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: selected ? const Color(0xFF1A3F8F) : const Color(0xFFCCDDFF),
-                  width: selected ? 1.5 : 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    source == PhotoPickSource.gallery
-                        ? Icons.photo_library_outlined
-                        : source == PhotoPickSource.files
-                            ? Icons.folder_outlined
-                            : Icons.auto_awesome,
-                    color: selected ? const Color(0xFF1A3F8F) : const Color(0xFF334E8A),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      _photoSourceLabel(source),
-                      style: TextStyle(
-                        fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
-                        color: selected ? const Color(0xFF1A3060) : const Color(0xFF334E8A),
-                      ),
-                    ),
-                  ),
-                  if (selected)
-                    const Icon(Icons.check_circle_outline, color: Color(0xFF1A3F8F), size: 20),
-                ],
-              ),
-            ),
-          );
-        }).toList(growable: false),
-      ),
-    );
-  }
+  Widget _buildTabPhotos() {
+    final photos = _controller.photos;
+    if (photos.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.photo_library_outlined, size: 64, color: Colors.grey[300]),
+            const SizedBox(height: 16),
+            const Text('Нет фотографий', style: TextStyle(color: Colors.grey, fontSize: 16)),
+            const SizedBox(height: 12),
+            FilledButton(onPressed: _addPhotosAsIs, child: const Text('Добавить фото')),
+          ],
+        ),
+      );
+    }
 
-  Widget _buildCompressionCard() {
-    return _SettingGroupCard(
-      title: 'Сжатие фото перед отправкой',
-      icon: Icons.compress,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: CompressionPreset.values.map((preset) {
-          final selected = _selectedCompression == preset;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedCompression = preset),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFFEEF4FF) : const Color(0xFFF8FBFF),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: selected ? const Color(0xFF1A3F8F) : const Color(0xFFCCDDFF),
-                  width: selected ? 1.5 : 1,
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    preset == CompressionPreset.none
-                        ? Icons.photo_size_select_actual_outlined
-                        : Icons.photo_size_select_small_outlined,
-                    color: selected ? const Color(0xFF1A3F8F) : const Color(0xFF334E8A),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          compressionPresetLabel(preset),
-                          style: TextStyle(
-                            fontWeight: selected ? FontWeight.w700 : FontWeight.normal,
-                            color: selected ? const Color(0xFF1A3060) : const Color(0xFF334E8A),
-                          ),
-                        ),
-                        Text(
-                          compressionPresetDescription(preset),
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: selected ? const Color(0xFF334E8A) : const Color(0xFF5A6E9A),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (selected)
-                    const Icon(Icons.check_circle_outline, color: Color(0xFF1A3F8F), size: 20),
-                ],
-              ),
+    return Column(
+      children: [
+        _buildPhotosHeader(),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.all(12),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
             ),
-          );
-        }).toList(growable: false),
-      ),
-    );
-  }
-
-  Widget _buildLimitCard() {
-    return _SettingGroupCard(
-      title: 'Лимит одного письма',
-      icon: Icons.data_usage_outlined,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _limitController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: InputDecoration(
-              labelText: 'Максимум, МБ',
-              hintText: '25',
-              suffixText: 'МБ',
-              errorText: _limitError,
-              filled: true,
-              fillColor: const Color(0xFFF8FBFF),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onChanged: (_) {
-              if (_limitError != null) setState(() => _limitError = null);
+            itemCount: photos.length,
+            itemBuilder: (context, index) {
+              final photo = photos[index];
+              return _PhotoTile(
+                photo: photo,
+                selected: true,
+                rotationAngle: 0,
+                subtitle: '',
+                onTap: () {},
+                onLongPress: () {},
+                onRemove: () => _controller.removePhoto(photo.uri),
+              );
             },
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [10, 20, 25, 50].map((v) => ActionChip(
-              label: Text('$v МБ'),
-              backgroundColor: const Color(0xFFEBF2FF),
-              side: const BorderSide(color: Color(0xFFB3CFFF)),
-              onPressed: () => setState(() {
-                _limitController.text = '$v';
-                _limitError = null;
-              }),
-            )).toList(growable: false),
+        ),
+        _buildDeveloperFooter(),
+      ],
+    );
+  }
+
+  Widget _buildPhotosHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      color: Colors.white,
+      child: Row(
+        children: [
+          _QuickStatChip(icon: Icons.image, text: '${_controller.totalPickedCount} шт.'),
+          const SizedBox(width: 8),
+          _QuickStatChip(icon: Icons.straighten, text: '${_controller.selectedSizeMb.toStringAsFixed(1)} МБ'),
+          const Spacer(),
+          TextButton(
+            onPressed: () => _controller.clearAllPhotos(),
+            child: const Text('Очистить', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildSendMethodCard() {
-    return _SettingGroupCard(
-      title: 'Каким способом отправлять?',
-      icon: Icons.send_outlined,
+  Widget _buildFabPhotos() {
+    return FloatingActionButton.extended(
+      onPressed: _addPhotosWithSourceOverride,
+      backgroundColor: const Color(0xFF1A3F8F),
+      foregroundColor: Colors.white,
+      icon: const Icon(Icons.add_a_photo),
+      label: const Text('Добавить'),
+    );
+  }
+
+  Widget _buildTabLettersAndCompose() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: SendMethodOption.values.map((option) {
-          final selected = _selectedSendMethod == option;
-          return GestureDetector(
-            onTap: () => setState(() => _selectedSendMethod = option),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              margin: const EdgeInsets.only(bottom: 8),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-              decoration: BoxDecoration(
-                color: selected ? const Color(0xFF1A3F8F) : const Color(0xFFF8FBFF),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: selected ? const Color(0xFF1A3F8F) : const Color(0xFFCCDDFF),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    option == SendMethodOption.automatic
-                        ? Icons.auto_mode
-                        : Icons.share_outlined,
-                    color: selected ? Colors.white : const Color(0xFF334E8A),
-                    size: 20,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          sendMethodOptionLabel(option),
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            color: selected ? Colors.white : const Color(0xFF1A3060),
-                          ),
-                        ),
-                        Text(
-                          option == SendMethodOption.automatic
-                              ? 'Без участия пользователя (нужен Яндекс)'
-                              : 'Через системное меню «Поделиться»',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: selected ? Colors.white70 : const Color(0xFF5A6E9A),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (selected)
-                    const Icon(Icons.check_circle, color: Colors.white, size: 20),
-                ],
-              ),
-            ),
-          );
-        }).toList(growable: false),
+        children: [
+          _buildComposeCard(),
+          const SizedBox(height: 16),
+          _buildLetterAnalyticsCard(),
+          const SizedBox(height: 16),
+          _buildBatchList(),
+        ],
       ),
     );
   }
 
-  Widget _buildYandexAuthCard() {
-    return AnimatedBuilder(
-      animation: widget.controller,
-      builder: (context, _) {
-        final auth = widget.controller.yandexAuthState;
-        final busy = widget.controller.isAutomationActionInProgress;
-        final hasAppPassword = widget.controller.hasSmtpAppPassword;
-        final selfEmail = auth.smtpIdentity.trim().isNotEmpty
-            ? auth.smtpIdentity.trim()
-            : auth.email.trim();
-        final smtpReady = auth.smtpReady;
-        final selfTestError = widget.controller.errorMessage?.trim();
-        final hasSelfTestError = selfTestError != null && selfTestError.isNotEmpty;
-        final selfTestSucceeded = widget.controller.smtpSelfTestSucceeded;
-        final selfTestUpdatedAt = widget.controller.smtpSelfTestUpdatedAt;
-        final selfTestUpdatedAtText = selfTestUpdatedAt == null
-            ? ''
-            : DateFormat('dd.MM HH:mm').format(selfTestUpdatedAt);
-        final hasTypedPassword = _appPasswordController.text.trim().isNotEmpty;
-        final canSaveAndRun = auth.authorized && !busy && selfEmail.isNotEmpty &&
-            (hasTypedPassword || hasAppPassword);
+  Widget _buildComposeCard() {
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: Colors.white,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            TextField(
+              controller: _recipientController,
+              decoration: InputDecoration(
+                labelText: 'Кому',
+                prefixIcon: const Icon(Icons.person_outline),
+                errorText: _recipientError,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _subjectController,
+              decoration: const InputDecoration(
+                labelText: 'Тема',
+                prefixIcon: const Icon(Icons.subject),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _reportDateController,
+                    decoration: InputDecoration(
+                      labelText: 'Дата отчета',
+                      prefixIcon: const Icon(Icons.calendar_today_outlined),
+                      errorText: _reportDateError,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.today, color: Color(0xFF1A3F8F)),
+                  onPressed: () => setState(() => _reportDateController.text = _reportDateFormat.format(DateTime.now())),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-        return _SettingGroupCard(
-          title: 'Авторизация в Яндекс Почте',
-          icon: Icons.lock_outlined,
-          statusColor: smtpReady
-              ? const Color(0xFF2E9A53)
-              : (hasSelfTestError ? const Color(0xFFB21E35) : null),
-          statusLabel: smtpReady
-              ? 'Готово'
-              : (hasSelfTestError ? 'Ошибка' : null),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+  Widget _buildLetterAnalyticsCard() {
+    final batches = _controller.estimatedEmailBatches;
+    final totalSize = _controller.selectedSizeMb.toStringAsFixed(1);
+    
+    return Card(
+      elevation: 0,
+      color: const Color(0xFFEEF4FF),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFFD0E0FF))),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Письма не открывают вложения и ещё не дают взаимодействия с файлами',
+              style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1A3F8F), fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _AnalyticsItem(label: 'Всего писем:', value: '${batches.length}'),
+                const SizedBox(width: 20),
+                _AnalyticsItem(label: 'Общий вес:', value: '$totalSize МБ'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBatchList() {
+    final batches = _controller.estimatedEmailBatches;
+    if (batches.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+          child: Text('Распределение по частям', style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF5A6E9A))),
+        ),
+        ...batches.map((b) => Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
             children: [
-              _AuthStatusRow(
-                authorized: auth.authorized,
-                displayName: auth.authorized ? auth.displayName : null,
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      style: FilledButton.styleFrom(
-                        backgroundColor: const Color(0xFF1A3F8F),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: busy ? null : _loginYandex,
-                      icon: const Icon(Icons.login, size: 18),
-                      label: const Text('Войти'),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                          color: (!auth.authorized || busy)
-                              ? const Color(0xFFCCDDFF)
-                              : const Color(0xFF7A9ADB),
-                        ),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                      ),
-                      onPressed: (!auth.authorized || busy) ? null : _logoutYandex,
-                      icon: const Icon(Icons.logout, size: 18),
-                      label: const Text('Выйти'),
-                    ),
-                  ),
-                ],
-              ),
-              if (selfEmail.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                _InfoTile(
-                  icon: Icons.send,
-                  label: 'Отправитель',
-                  value: selfEmail,
-                ),
-              ],
-              const SizedBox(height: 14),
-              const Divider(height: 1, color: Color(0xFFDDE7FF)),
-              const SizedBox(height: 14),
-
-              Row(
-                children: [
-                  const Icon(Icons.password_outlined, size: 16, color: Color(0xFF334E8A)),
-                  const SizedBox(width: 6),
-                  const Text(
-                    'Пароль приложения',
-                    style: TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1A3060)),
-                  ),
-                  const Spacer(),
-                  if (hasAppPassword && !_editingAppPassword)
-                    TextButton(
-                      onPressed: busy ? null : () => setState(() => _editingAppPassword = true),
-                      style: TextButton.styleFrom(
-                        foregroundColor: const Color(0xFF1A3F8F),
-                        textStyle: const TextStyle(fontSize: 12),
-                      ),
-                      child: const Text('Изменить'),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              if (hasAppPassword && !_editingAppPassword)
-                _PasswordSavedBadge(onClear: busy ? null : _clearSmtpAppPassword)
-              else ...[
-                Builder(
-                  builder: (context) {
-                    final pwLength = _appPasswordController.text.replaceAll(' ', '').length;
-                    final isGood = pwLength >= 16;
-                    final isOk = pwLength >= 8;
-                    final hasInput = pwLength > 0;
-                    final borderColor = isGood
-                        ? const Color(0xFF2E9A53)
-                        : (isOk ? const Color(0xFFF9A825) : const Color(0xFFCCDDFF));
-                    final counterText = f"{pwLength}/16";
-                    
-                    return TextField(
-                      controller: _appPasswordController,
-                      obscureText: true,
-                      enableSuggestions: false,
-                      autocorrect: false,
-                      decoration: InputDecoration(
-                        hintText: 'abcd fgih jklm nopq',
-                        filled: true,
-                        fillColor: const Color(0xFFF8FBFF),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: borderColor, width: hasInput ? 1.5 : 1.0),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide(color: borderColor, width: 2.0),
-                        ),
-                        prefixIcon: Icon(
-                          Icons.vpn_key_outlined,
-                          color: isGood ? const Color(0xFF2E9A53) : const Color(0xFF7A9ADB),
-                        ),
-                        suffixIcon: Padding(
-                          padding: const EdgeInsets.only(right: 14),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                counterText,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: isGood
-                                      ? const Color(0xFF2E9A53)
-                                      : (isOk ? const Color(0xFFF9A825) : const Color(0xFF9AA9C4)),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      onChanged: (_) => setState(() {}),
-                    );
-                  }
-                ),
-                const SizedBox(height: 6),
-                const Text(
-                  'Создайте в Яндекс ID → Пароли приложений → Почта.
-Формат: 16 букв (пробелы не важны).',
-                  style: TextStyle(fontSize: 12, color: Color(0xFF5A6E9A)),
-                ),
-              ],
-              const SizedBox(height: 12),
-
-              if (busy)
-                const _SmtpTestingIndicator()
-              else
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: canSaveAndRun
-                        ? const Color(0xFF1A3F8F)
-                        : const Color(0xFFBBC8E0),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: canSaveAndRun ? _saveAndRunSelfTest : null,
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: const Text('Сохранить и проверить', style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-
-              if (!canSaveAndRun) ...[
-                const SizedBox(height: 6),
-                _HintText(
-                  text: !auth.authorized
-                      ? 'Сначала войдите в Яндекс.'
-                      : (!hasTypedPassword && !hasAppPassword)
-                          ? 'Введите пароль приложения Яндекс.'
-                          : selfEmail.isEmpty
-                              ? 'Не удалось определить адрес. Войдите заново.'
-                              : '',
-                ),
-              ],
-
-              if (hasSelfTestError || selfTestSucceeded == true) ...[
-                const SizedBox(height: 12),
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 260),
-                  child: hasSelfTestError
-                      ? _SmtpResultBanner(
-                          key: const ValueKey('error'),
-                          success: false,
-                          message: selfTestError!,
-                          updatedAt: selfTestUpdatedAtText,
-                        )
-                      : _SmtpResultBanner(
-                          key: const ValueKey('ok'),
-                          success: true,
-                          message: 'Тестовое письмо отправлено успешно.',
-                          updatedAt: selfTestUpdatedAtText,
-                        ),
-                ),
-              ],
-
-              if (hasSelfTestError) ...[
-                const SizedBox(height: 10),
-                _SmtpTroubleshootingHint(),
-              ],
+              CircleAvatar(backgroundColor: const Color(0xFF1A3F8F), radius: 12, child: Text('${b.index}', style: const TextStyle(fontSize: 10, color: Colors.white))),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Часть ${b.index}: ${b.photosCount} фото')),
+              Text('${(b.totalBytes / 1024 / 1024).toStringAsFixed(1)} МБ', style: const TextStyle(fontWeight: FontWeight.w700)),
             ],
           ),
-        );
-      },
+        )),
+      ],
     );
   }
 
-  Widget _buildAutoSendCard() {
-    return AnimatedBuilder(
-      animation: widget.controller,
-      builder: (context, _) {
-        final auth = widget.controller.yandexAuthState;
-        return _SettingGroupCard(
-          title: 'Автоотправка в фоне',
-          icon: Icons.autorenew,
-          child: SwitchListTile(
-            value: _autoSendEnabled,
-            onChanged: (auth.authorized && auth.smtpReady)
-                ? (v) => setState(() => _autoSendEnabled = v)
-                : null,
-            title: const Text('Включить', style: TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(
-              auth.authorized
-                  ? (auth.smtpReady
-                      ? 'Письма будут уходить одно за другим'
-                      : 'Требуется авторизация')
-                  : 'Сначала войдите в Яндекс.',
-              style: const TextStyle(color: Color(0xFF5A6E9A)),
+  Widget _buildTabSend() {
+    final isAuto = _usingAutomaticMode;
+
+    return Container(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildSendProgressHeader(),
+          const SizedBox(height: 48),
+          if (!_controller.isAutoSending) ...[
+            FilledButton.icon(
+              onPressed: _canStartSend ? _handlePrimarySendAction : null,
+              style: FilledButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 20),
+                backgroundColor: const Color(0xFF1A3F8F),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              ),
+              icon: const Icon(Icons.send, size: 24),
+              label: Text(_primarySendActionLabel(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             ),
-            contentPadding: EdgeInsets.zero,
-            activeColor: const Color(0xFF1A3F8F),
-          ),
-        );
-      },
+          ] else ...[
+            const Center(child: CircularProgressIndicator()),
+            const SizedBox(height: 24),
+            Text(_primarySendActionLabel(), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 12),
+            OutlinedButton(onPressed: () => _controller.cancelAutoSending(), child: const Text('Остановить', style: TextStyle(color: Colors.red))),
+          ],
+          if (isAuto && !_controller.isAutoSending) ...[
+            const SizedBox(height: 12),
+            Text(
+              _controller.yandexAuthState.smtpReady ? 'Готов к автоматической отправке' : 'Требуется авторизация Яндекс',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 12, color: _controller.yandexAuthState.smtpReady ? Colors.green : Colors.orange),
+            ),
+          ],
+        ],
+      ),
     );
   }
+
+  Widget _buildSendProgressHeader() {
+    return Column(
+      children: [
+        const Icon(Icons.cloud_upload_outlined, size: 84, color: Color(0xFF1A3F8F)),
+        const SizedBox(height: 16),
+        const Text('Готовность к отправке', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Text('${_controller.selectedFilesCount} фото в ${_controller.estimatedEmails} письмах', style: const TextStyle(color: Colors.grey)),
+      ],
+    );
+  }
+
+  Widget _buildDeveloperFooter() {
+    return GestureDetector(
+      onTap: _handleSecurityEasterEgg,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        alignment: Alignment.center,
+        child: Text(
+          'Разработал Aлексей',
+          style: TextStyle(color: Colors.grey[400], fontSize: 12, decoration: TextDecoration.underline),
+        ),
+      ),
+    );
+  }
+
+  void _handleSecurityEasterEgg() {
+    final now = DateTime.now();
+    if (now.difference(_lastSecurityStepTap).inSeconds > 2) {
+      _securityStepCounter = 1;
+    } else {
+      _securityStepCounter++;
+    }
+    _lastSecurityStepTap = now;
+
+    if (_securityStepCounter >= 5) {
+      _securityStepCounter = 0;
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('5 шагов безопасности'),
+          content: const Text(
+            '1) Сделай паузу и продумай работу.\n\n'
+            '2) Определи опасности и возможные последствия.\n\n'
+            '3) Реши, как защитить себя и других от этих опасностей.\n\n'
+            '4) Реши, что делать в экстренных случаях.\n\n'
+            '5) Прими решение: начинать/продолжать работу или нет.',
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('Понял'))],
+        ),
+      );
+    }
+  }
+
   String _photoSourceLabel(PhotoPickSource source) {
     switch (source) {
-      case PhotoPickSource.auto:
-        return 'Системный выбор';
-      case PhotoPickSource.gallery:
-        return 'Галерея';
-      case PhotoPickSource.files:
-        return 'Файлы';
+      case PhotoPickSource.auto: return 'Системный выбор';
+      case PhotoPickSource.gallery: return 'Галерея';
+      case PhotoPickSource.files: return 'Файлы';
     }
   }
 }
+
+class _AnalyticsItem extends StatelessWidget {
+  const _AnalyticsItem({required this.label, required this.value});
+  final String label;
+  final String value;
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF5A6E9A))),
+        Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1A3F8F))),
+      ],
+    );
+  }
+}
+
+class _NoneClass { // Placeholder to match structure
+
 
 class _QuickStatChip extends StatelessWidget {
   const _QuickStatChip({
@@ -1735,3 +1584,411 @@ class _SplashScreen extends StatelessWidget {
     );
   }
 }
+
+class _SendSettingsResult {
+  const _SendSettingsResult({
+    required this.limitMb,
+    required this.sendMethod,
+    required this.photoSource,
+    required this.compression,
+    required this.autoSendEnabled,
+    required this.sendOrder,
+  });
+
+  final String limitMb;
+  final SendMethodOption sendMethod;
+  final PhotoPickSource photoSource;
+  final CompressionPreset compression;
+  final bool autoSendEnabled;
+  final SendOrderOption sendOrder;
+}
+
+class _SendSettingsPage extends StatefulWidget {
+  const _SendSettingsPage({
+    required this.controller,
+    required this.initialLimitMb,
+    required this.initialSendMethod,
+    required this.initialPhotoSource,
+    required this.initialCompression,
+    required this.initialAutoSendEnabled,
+    required this.initialSendOrder,
+  });
+
+  final SendController controller;
+  final String initialLimitMb;
+  final SendMethodOption initialSendMethod;
+  final PhotoPickSource initialPhotoSource;
+  final CompressionPreset initialCompression;
+  final bool initialAutoSendEnabled;
+  final SendOrderOption initialSendOrder;
+
+  @override
+  State<_SendSettingsPage> createState() => _SendSettingsPageState();
+}
+
+class _SendSettingsPageState extends State<_SendSettingsPage> {
+  late final TextEditingController _limitController;
+  late final TextEditingController _appPasswordController;
+  late PhotoPickSource _selectedPhotoSource;
+  late CompressionPreset _selectedCompression;
+  late SendMethodOption _selectedSendMethod;
+  late SendOrderOption _selectedSendOrder;
+  late bool _autoSendEnabled;
+  bool _editingAppPassword = false;
+  String? _limitError;
+
+  @override
+  void initState() {
+    super.initState();
+    _limitController = TextEditingController(text: widget.initialLimitMb);
+    _appPasswordController = TextEditingController();
+    _selectedPhotoSource = widget.initialPhotoSource;
+    _selectedCompression = widget.initialCompression;
+    _selectedSendMethod = widget.initialSendMethod;
+    _selectedSendOrder = widget.initialSendOrder;
+    _autoSendEnabled = widget.initialAutoSendEnabled;
+  }
+
+  @override
+  void dispose() {
+    _limitController.dispose();
+    _appPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _save() {
+    final limit = _limitController.text.trim();
+    if (limit.isEmpty) {
+      setState(() => _limitError = 'Укажите лимит');
+      return;
+    }
+    Navigator.of(context).pop(_SendSettingsResult(
+      limitMb: limit,
+      sendMethod: _selectedSendMethod,
+      photoSource: _selectedPhotoSource,
+      compression: _selectedCompression,
+      autoSendEnabled: _autoSendEnabled,
+      sendOrder: _selectedSendOrder,
+    ));
+  }
+
+  Future<void> _loginYandex() => widget.controller.startYandexLogin();
+  Future<void> _logoutYandex() => widget.controller.logoutYandex();
+
+  Future<void> _saveAndRunSelfTest() async {
+    final pw = _appPasswordController.text.trim().replaceAll(' ', '');
+    await widget.controller.saveSmtpAppPassword(pw);
+    setState(() {
+      _editingAppPassword = false;
+      _appPasswordController.clear();
+    });
+    await widget.controller.runSmtpSelfTest(
+      recipientEmail: widget.controller.settings.recipientEmail,
+    );
+  }
+
+  Future<void> _clearSmtpAppPassword() async {
+    await widget.controller.clearSmtpAppPassword();
+    setState(() => _editingAppPassword = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF2F6FF),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF1A3F8F),
+        foregroundColor: Colors.white,
+        title: const Text('Настройки', style: TextStyle(fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(onPressed: _save, icon: const Icon(Icons.check)),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          children: [
+            _buildExpansionGroup(
+              title: '1. Источник фото',
+              icon: Icons.photo_library_outlined,
+              initiallyExpanded: true,
+              children: [
+                _buildPhotoSourceGrid(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildExpansionGroup(
+              title: '4. Сжатие фото',
+              icon: Icons.compress,
+              children: [
+                _buildCompressionOptions(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildExpansionGroup(
+              title: '5. Лимит письма',
+              icon: Icons.data_usage_outlined,
+              children: [
+                _buildLimitInput(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildExpansionGroup(
+              title: '2. Способ отправки',
+              icon: Icons.send_outlined,
+              children: [
+                _buildSendMethodOptions(),
+              ],
+            ),
+            if (_selectedSendMethod == SendMethodOption.automatic) ...[
+              const SizedBox(height: 12),
+              _buildExpansionGroup(
+                title: '3. Авторизация Яндекс',
+                icon: Icons.lock_outlined,
+                children: [
+                  _buildYandexAuthContent(),
+                ],
+              ),
+            ],
+            const SizedBox(height: 12),
+            _buildExpansionGroup(
+              title: '6. Порядок файлов',
+              icon: Icons.sort,
+              children: [
+                _buildOrderOptions(),
+              ],
+            ),
+            const SizedBox(height: 12),
+            _buildExpansionGroup(
+              title: '7. Автоотправка',
+              icon: Icons.autorenew,
+              children: [
+                _buildAutoSendToggle(),
+              ],
+            ),
+            const SizedBox(height: 32),
+            FilledButton.icon(
+              onPressed: _save,
+              style: FilledButton.styleFrom(
+                minimumSize: const Size.fromHeight(54),
+                backgroundColor: const Color(0xFF1A3F8F),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              icon: const Icon(Icons.save),
+              label: const Text('Применить все настройки', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildExpansionGroup({
+    required String title,
+    required IconData icon,
+    required List<Widget> children,
+    bool initiallyExpanded = false,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          leading: Icon(icon, color: const Color(0xFF1A3F8F)),
+          title: Text(
+            title,
+            style: const TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1A3060), fontSize: 15),
+          ),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          expandedCrossAxisAlignment: CrossAxisAlignment.stretch,
+          children: children,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPhotoSourceGrid() {
+    return Column(
+      children: PhotoPickSource.values.map((source) {
+        final selected = _selectedPhotoSource == source;
+        return RadioListTile<PhotoPickSource>(
+          value: source,
+          groupValue: _selectedPhotoSource,
+          title: Text(_photoSourceLabel(source)),
+          onChanged: (v) => setState(() => _selectedPhotoSource = v!),
+          contentPadding: EdgeInsets.zero,
+          activeColor: const Color(0xFF1A3F8F),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildCompressionOptions() {
+    return Column(
+      children: CompressionPreset.values.map((preset) {
+        return RadioListTile<CompressionPreset>(
+          value: preset,
+          groupValue: _selectedCompression,
+          title: Text(compressionPresetLabel(preset)),
+          subtitle: Text(compressionPresetDescription(preset), style: const TextStyle(fontSize: 12)),
+          onChanged: (v) => setState(() => _selectedCompression = v!),
+          contentPadding: EdgeInsets.zero,
+          activeColor: const Color(0xFF1A3F8F),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildLimitInput() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        TextField(
+          controller: _limitController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'МБ',
+            errorText: _limitError,
+            filled: true,
+            fillColor: const Color(0xFFF8FBFF),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          children: [10, 20, 25, 50].map((v) => ActionChip(
+            label: Text('$v МБ'),
+            onPressed: () => setState(() => _limitController.text = '$v'),
+          )).toList(),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSendMethodOptions() {
+    return Column(
+      children: SendMethodOption.values.map((option) {
+        return RadioListTile<SendMethodOption>(
+          value: option,
+          groupValue: _selectedSendMethod,
+          title: Text(sendMethodOptionLabel(option)),
+          subtitle: Text(option == SendMethodOption.automatic ? 'Фоновая отправка через Яндекс' : 'Системное меню'),
+          onChanged: (v) => setState(() => _selectedSendMethod = v!),
+          contentPadding: EdgeInsets.zero,
+          activeColor: const Color(0xFF1A3F8F),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildOrderOptions() {
+    return Column(
+      children: SendOrderOption.values.map((option) {
+        return RadioListTile<SendOrderOption>(
+          value: option,
+          groupValue: _selectedSendOrder,
+          title: Text(sendOrderOptionLabel(option)),
+          onChanged: (v) => setState(() => _selectedSendOrder = v!),
+          contentPadding: EdgeInsets.zero,
+          activeColor: const Color(0xFF1A3F8F),
+        );
+      }).toList(),
+    );
+  }
+
+  Widget _buildAutoSendToggle() {
+    return SwitchListTile(
+      value: _autoSendEnabled,
+      onChanged: (v) => setState(() => _autoSendEnabled = v),
+      title: const Text('Отправлять пакеты без пауз'),
+      contentPadding: EdgeInsets.zero,
+      activeColor: const Color(0xFF1A3F8F),
+    );
+  }
+
+  Widget _buildYandexAuthContent() {
+    // Reusing children logic from _buildYandexAuthCard
+    return AnimatedBuilder(
+      animation: widget.controller,
+      builder: (context, _) {
+        final auth = widget.controller.yandexAuthState;
+        final busy = widget.controller.isAutomationActionInProgress;
+        final hasAppPassword = widget.controller.hasSmtpAppPassword;
+        final selfEmail = auth.smtpIdentity.trim().isNotEmpty ? auth.smtpIdentity.trim() : auth.email.trim();
+        final smtpReady = auth.smtpReady;
+        final selfTestError = widget.controller.errorMessage?.trim();
+        final hasSelfTestError = selfTestError != null && selfTestError.isNotEmpty;
+        final selfTestSucceeded = widget.controller.smtpSelfTestSucceeded;
+        final selfTestUpdatedAt = widget.controller.smtpSelfTestUpdatedAt;
+        final selfTestUpdatedAtText = selfTestUpdatedAt == null ? '' : DateFormat('dd.MM HH:mm').format(selfTestUpdatedAt);
+        final hasTypedPassword = _appPasswordController.text.trim().isNotEmpty;
+        final canSaveAndRun = auth.authorized && !busy && selfEmail.isNotEmpty && (hasTypedPassword || hasAppPassword);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _AuthStatusRow(authorized: auth.authorized, displayName: auth.authorized ? auth.displayName : null),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(child: FilledButton.icon(onPressed: busy ? null : _loginYandex, icon: const Icon(Icons.login), label: const Text('Войти'))),
+                const SizedBox(width: 8),
+                Expanded(child: OutlinedButton.icon(onPressed: (!auth.authorized || busy) ? null : _logoutYandex, icon: const Icon(Icons.logout), label: const Text('Выйти'))),
+              ],
+            ),
+            if (selfEmail.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              _InfoTile(icon: Icons.send, label: 'Email', value: selfEmail),
+            ],
+            const Divider(height: 24),
+            const Text('Пароль приложения', style: TextStyle(fontWeight: FontWeight.w700)),
+            const SizedBox(height: 8),
+            if (hasAppPassword && !_editingAppPassword)
+              _PasswordSavedBadge(onClear: busy ? null : _clearSmtpAppPassword)
+            else ...[
+              TextField(
+                controller: _appPasswordController,
+                obscureText: true,
+                decoration: InputDecoration(hintText: 'abcd fgih jklm nopq', prefixIcon: const Icon(Icons.vpn_key)),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: 6),
+              const Text('16-значный пароль из Яндекс ID.', style: TextStyle(fontSize: 12, color: Colors.grey)),
+            ],
+            const SizedBox(height: 12),
+            if (busy) const _SmtpTestingIndicator()
+            else FilledButton(onPressed: canSaveAndRun ? _saveAndRunSelfTest : null, child: const Text('Проверить доступ')),
+            if (hasSelfTestError || selfTestSucceeded == true) ...[
+              const SizedBox(height: 12),
+              _SmtpResultBanner(success: selfTestSucceeded == true, message: hasSelfTestError ? selfTestError! : 'Доступ подтвержден', updatedAt: selfTestUpdatedAtText),
+            ],
+            if (hasSelfTestError) ...[
+              const SizedBox(height: 10),
+              const _SmtpTroubleshootingHint(),
+            ],
+          ],
+        );
+      },
+    );
+  }
+
+  String _photoSourceLabel(PhotoPickSource source) {
+    switch (source) {
+      case PhotoPickSource.auto: return 'Системный';
+      case PhotoPickSource.gallery: return 'Галерея';
+      case PhotoPickSource.files: return 'Файлы';
+    }
+  }
+}
+

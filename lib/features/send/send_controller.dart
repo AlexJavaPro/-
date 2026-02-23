@@ -76,7 +76,14 @@ class SendController extends ChangeNotifier {
   final RecentContactsRepository _recentContactsRepository;
   final SendDraftRepository _draftRepository;
 
-  static const Set<String> _compressionPresets = <String>{'none'};
+  static const Set<String> _compressionPresets = <String>{
+    'none',
+    'jpeg_light',
+    'jpeg_medium',
+    'jpeg_strong',
+    'webp_light',
+    'webp_medium',
+  };
 
   AppSettings settings = AppSettings.defaults();
   List<PhotoDescriptor> photos = const [];
