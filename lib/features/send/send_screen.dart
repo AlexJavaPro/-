@@ -548,21 +548,32 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
 
   PreferredSizeWidget _buildAppBar() {
     String title = 'ФотоПочта';
-    if (_tabIndex == 0) title = 'Фотографии';
-    if (_tabIndex == 1) title = 'Письма и данные';
+    if (_tabIndex == 0) title = 'Мои Фотографии';
+    if (_tabIndex == 1) title = 'Письма и Состав';
     if (_tabIndex == 2) title = 'Отправка';
 
     return AppBar(
-      backgroundColor: const Color(0xFF1A3F8F),
+      flexibleSpace: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF1A3F8F), Color(0xFF2E74FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+      ),
+      backgroundColor: Colors.transparent,
       foregroundColor: Colors.white,
       elevation: 0,
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w800)),
+      centerTitle: true,
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 0.5)),
       actions: [
         IconButton(
-          icon: const Icon(Icons.settings_outlined),
+          icon: const Icon(Icons.settings_suggest_outlined),
           onPressed: _openSendSettingsPage,
           tooltip: 'Настройки',
         ),
+        const SizedBox(width: 8),
       ],
     );
   }
@@ -570,21 +581,25 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
   Widget _buildBottomNav() {
     return Container(
       decoration: BoxDecoration(
+        color: Colors.white,
         boxShadow: [
-          BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 10, offset: const Offset(0, -2))
+          BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 20, offset: const Offset(0, -4))
         ],
       ),
       child: BottomNavigationBar(
         currentIndex: _tabIndex,
         onTap: (index) => setState(() => _tabIndex = index),
         selectedItemColor: const Color(0xFF1A3F8F),
-        unselectedItemColor: const Color(0xFF7A9ADB),
+        unselectedItemColor: const Color(0xFF9AA9C4),
         backgroundColor: Colors.white,
+        elevation: 0,
         type: BottomNavigationBarType.fixed,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
         items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.photo_library), label: 'Фото'),
-          BottomNavigationBarItem(icon: Icon(Icons.email), label: 'Письма'),
-          BottomNavigationBarItem(icon: Icon(Icons.send), label: 'Отправка'),
+          BottomNavigationBarItem(icon: Icon(Icons.photo_library_rounded), activeIcon: Icon(Icons.photo_library), label: 'Фото'),
+          BottomNavigationBarItem(icon: Icon(Icons.email_outlined), activeIcon: Icon(Icons.email), label: 'Письма'),
+          BottomNavigationBarItem(icon: Icon(Icons.rocket_launch_outlined), activeIcon: Icon(Icons.rocket_launch), label: 'Отправка'),
         ],
       ),
     );
@@ -640,17 +655,30 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
 
   Widget _buildPhotosHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      color: Colors.white,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        border: Border(bottom: BorderSide(color: Colors.grey[200]!)),
+      ),
       child: Row(
         children: [
-          _QuickStatChip(icon: Icons.image, text: '${_controller.totalPickedCount} шт.'),
-          const SizedBox(width: 8),
-          _QuickStatChip(icon: Icons.straighten, text: '${_controller.selectedSizeMb.toStringAsFixed(1)} МБ'),
+          _QuickStatChip(
+            icon: Icons.image, 
+            text: '${_controller.totalPickedCount} шт.',
+            color: const Color(0xFF1A3F8F),
+          ),
+          const SizedBox(width: 10),
+          _QuickStatChip(
+            icon: Icons.straighten, 
+            text: '${_controller.selectedSizeMb.toStringAsFixed(1)} МБ',
+            color: const Color(0xFF2E74FF),
+          ),
           const Spacer(),
-          TextButton(
-            onPressed: () => _controller.clearAllPhotos(),
-            child: const Text('Очистить', style: TextStyle(color: Colors.red)),
+          TextButton.icon(
+            onPressed: () => _controller.clearSelectedPhotos(),
+            icon: const Icon(Icons.delete_sweep_outlined, size: 18),
+            label: const Text('Очистить', style: TextStyle(fontWeight: FontWeight.w700)),
+            style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
           ),
         ],
       ),
@@ -737,25 +765,51 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
     final batches = _controller.estimatedEmailBatches;
     final totalSize = _controller.selectedSizeMb.toStringAsFixed(1);
     
-    return Card(
-      elevation: 0,
-      color: const Color(0xFFEEF4FF),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: const BorderSide(color: Color(0xFFD0E0FF))),
+    return Container(
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [Color(0xFFEEF4FF), Color(0xFFF6F9FF)],
+          begin: Alignment.topLeft, end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD0E0FF)),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF1A3F8F).withValues(alpha: 0.05), blurRadius: 15, offset: const Offset(0, 4))
+        ],
+      ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Письма не открывают вложения и ещё не дают взаимодействия с файлами',
-              style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1A3F8F), fontSize: 13),
-            ),
-            const SizedBox(height: 12),
             Row(
               children: [
-                _AnalyticsItem(label: 'Всего писем:', value: '${batches.length}'),
-                const SizedBox(width: 20),
-                _AnalyticsItem(label: 'Общий вес:', value: '$totalSize МБ'),
+                const Icon(Icons.analytics_outlined, color: Color(0xFF1A3F8F), size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'АНАЛИТИКА ПИСЬМА',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900, 
+                      color: const Color(0xFF1A3F8F).withValues(alpha: 0.7), 
+                      fontSize: 11, 
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Письма не открывают вложения и ещё не дают взаимодействия с файлами',
+              style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF1A3060), fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(child: _AnalyticsItem(icon: Icons.mail_outline, label: 'Всего писем', value: '${batches.length}')),
+                Container(height: 30, width: 1, color: const Color(0xFFD0E0FF), margin: const EdgeInsets.symmetric(horizontal: 16)),
+                Expanded(child: _AnalyticsItem(icon: Icons.fitness_center_outlined, label: 'Общий вес', value: '$totalSize МБ')),
               ],
             ),
           ],
@@ -799,40 +853,102 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
     final isAuto = _usingAutomaticMode;
 
     return Container(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          _buildSendProgressHeader(),
-          const SizedBox(height: 48),
-          if (!_controller.isAutoSending) ...[
-            FilledButton.icon(
-              onPressed: _canStartSend ? _handlePrimarySendAction : null,
-              style: FilledButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 20),
-                backgroundColor: const Color(0xFF1A3F8F),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              icon: const Icon(Icons.send, size: 24),
-              label: Text(_primarySendActionLabel(), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-            ),
-          ] else ...[
-            const Center(child: CircularProgressIndicator()),
-            const SizedBox(height: 24),
-            Text(_primarySendActionLabel(), textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.w700)),
-            const SizedBox(height: 12),
-            OutlinedButton(onPressed: () => _controller.cancelAutoSending(), child: const Text('Остановить', style: TextStyle(color: Colors.red))),
-          ],
-          if (isAuto && !_controller.isAutoSending) ...[
-            const SizedBox(height: 12),
-            Text(
-              _controller.yandexAuthState.smtpReady ? 'Готов к автоматической отправке' : 'Требуется авторизация Яндекс',
-              textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 12, color: _controller.yandexAuthState.smtpReady ? Colors.green : Colors.orange),
-            ),
-          ],
-        ],
+      decoration: const BoxDecoration(
+        color: Color(0xFFF2F6FF),
+      ),
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              _buildSendProgressHeader(),
+              const SizedBox(height: 60),
+              if (!_controller.isAutoSending) ...[
+                Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: const Color(0xFF1A3F8F).withValues(alpha: 0.3),
+                        blurRadius: 20,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
+                  ),
+                  child: FilledButton.icon(
+                    onPressed: _canStartSend ? _handlePrimarySendAction : null,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 24),
+                      backgroundColor: const Color(0xFF1A3F8F),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.rocket_launch, size: 28),
+                    label: Text(_primarySendActionLabel(), style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900)),
+                  ),
+                ),
+              ] else ...[
+                const Center(
+                  child: SizedBox(
+                    width: 64,
+                    height: 64,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 6,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF1A3F8F)),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 32),
+                Text(_primarySendActionLabel(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1A3060))),
+                const SizedBox(height: 24),
+                OutlinedButton.icon(
+                  onPressed: () => _controller.cancelAutoSending(),
+                  icon: const Icon(Icons.stop_circle_outlined),
+                  label: const Text('Остановить процесс', style: TextStyle(fontWeight: FontWeight.w700)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                    side: const BorderSide(color: Colors.redAccent, width: 2),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  ),
+                ),
+              ],
+              if (isAuto && !_controller.isAutoSending) ...[
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: _controller.yandexAuthState.smtpReady 
+                        ? const Color(0xFFE7F4EA) 
+                        : const Color(0xFFFFF4E5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        _controller.yandexAuthState.smtpReady ? Icons.check_circle : Icons.warning_amber_rounded,
+                        size: 16,
+                        color: _controller.yandexAuthState.smtpReady ? Colors.green[700] : Colors.orange[800],
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _controller.yandexAuthState.smtpReady ? 'Готов к автоматической отправке' : 'Требуется авторизация Яндекс',
+                        style: TextStyle(
+                          fontSize: 13, 
+                          fontWeight: FontWeight.w700,
+                          color: _controller.yandexAuthState.smtpReady ? Colors.green[700] : Colors.orange[800],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -840,11 +956,37 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
   Widget _buildSendProgressHeader() {
     return Column(
       children: [
-        const Icon(Icons.cloud_upload_outlined, size: 84, color: Color(0xFF1A3F8F)),
-        const SizedBox(height: 16),
-        const Text('Готовность к отправке', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        Text('${_controller.selectedFilesCount} фото в ${_controller.estimatedEmails} письмах', style: const TextStyle(color: Colors.grey)),
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 140,
+              height: 140,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.05), blurRadius: 30, offset: const Offset(0, 10))
+                ],
+              ),
+            ),
+            const Icon(Icons.cloud_upload_outlined, size: 70, color: Color(0xFF1A3F8F)),
+          ],
+        ),
+        const SizedBox(height: 32),
+        const Text('Готовность к отправке', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Color(0xFF1A3060))),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFEEF4FF),
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Text(
+            '${_controller.selectedFilesCount} фото в ${_controller.estimatedEmails} письмах',
+            style: const TextStyle(color: Color(0xFF1A3F8F), fontWeight: FontWeight.w700),
+          ),
+        ),
       ],
     );
   }
@@ -890,18 +1032,11 @@ class _SendScreenState extends State<SendScreen> with WidgetsBindingObserver {
       );
     }
   }
-
-  String _photoSourceLabel(PhotoPickSource source) {
-    switch (source) {
-      case PhotoPickSource.auto: return 'Системный выбор';
-      case PhotoPickSource.gallery: return 'Галерея';
-      case PhotoPickSource.files: return 'Файлы';
-    }
-  }
 }
 
 class _AnalyticsItem extends StatelessWidget {
-  const _AnalyticsItem({required this.label, required this.value});
+  const _AnalyticsItem({required this.icon, required this.label, required this.value});
+  final IconData icon;
   final String label;
   final String value;
   @override
@@ -909,49 +1044,53 @@ class _AnalyticsItem extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF5A6E9A))),
-        Text(value, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800, color: Color(0xFF1A3F8F))),
+        Row(
+          children: [
+            Icon(icon, size: 12, color: const Color(0xFF5A6E9A)),
+            const SizedBox(width: 4),
+            Text(label, style: const TextStyle(fontSize: 11, color: Color(0xFF5A6E9A), fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: Color(0xFF1A3F8F))),
       ],
     );
   }
 }
 
-class _NoneClass { // Placeholder to match structure
-
+class _PhotoSourceSelectionResult {
+  final PhotoPickSource source;
+  final bool saveAsDefault;
+  const _PhotoSourceSelectionResult({required this.source, required this.saveAsDefault});
+}
 
 class _QuickStatChip extends StatelessWidget {
   const _QuickStatChip({
     required this.icon,
     required this.text,
+    this.color = const Color(0xFF1A3F8F),
   });
 
   final IconData icon;
   final String text;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
-    return DecoratedBox(
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F8FF),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFD7E6FF)),
+        color: color.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withValues(alpha: 0.2)),
       ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: const Color(0xFF2D73E0), size: 16),
-            const SizedBox(width: 6),
-            Text(
-              text,
-              style: const TextStyle(
-                color: Color(0xFF315785),
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 8),
+          Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: color)),
+        ],
       ),
     );
   }
@@ -978,97 +1117,107 @@ class _PhotoTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color:
-                  selected ? const Color(0xFF2E74FF) : const Color(0xFFD7E6FF),
-              width: selected ? 2 : 1,
-            ),
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Transform.rotate(
-                  angle: rotationAngle,
-                  child: photo.thumbnailBytes != null
-                      ? Image.memory(photo.thumbnailBytes!, fit: BoxFit.cover)
-                      : const ColoredBox(
-                          color: Color(0xFFE9F1FF),
-                          child: Icon(
-                            Icons.image_outlined,
-                            color: Color(0xFF5D7FB8),
-                          ),
-                        ),
-                ),
-                if (selected)
-                  Container(color: Colors.black.withValues(alpha: 0.18)),
-                if (selected)
-                  const Positioned(
-                    top: 6,
-                    left: 6,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: Color(0xFF2E74FF),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Padding(
-                        padding: EdgeInsets.all(2),
-                        child: Icon(
-                          Icons.check,
-                          size: 14,
-                          color: Colors.white,
-                        ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Transform.rotate(
+              angle: rotationAngle,
+              child: photo.thumbnailBytes != null
+                  ? Image.memory(photo.thumbnailBytes!, fit: BoxFit.cover)
+                  : const ColoredBox(
+                      color: Color(0xFFE9F1FF),
+                      child: Icon(
+                        Icons.image_outlined,
+                        color: Color(0xFF5D7FB8),
+                        size: 32,
                       ),
                     ),
-                  ),
-                Positioned(
-                  top: 0,
-                  right: 0,
-                  child: SizedBox(
-                    width: 46,
-                    height: 46,
-                    child: Align(
-                      alignment: Alignment.topRight,
-                      child: _TileActionButton(
-                        icon: Icons.close,
-                        onTap: onRemove,
-                        semanticLabel: 'Удалить фото',
-                      ),
-                    ),
-                  ),
-                ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 0,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(10, 4, 10, 4),
-                    color: Colors.black54,
-                    child: Text(
-                      subtitle,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
             ),
-          ),
+            // Bottom gradient overlay
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black.withValues(alpha: 0.6), Colors.transparent],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.center,
+                  ),
+                ),
+              ),
+            ),
+            if (selected)
+              Container(color: const Color(0xFF1A3F8F).withValues(alpha: 0.2)),
+            
+            Positioned(
+              top: 8,
+              left: 8,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 200),
+                opacity: selected ? 1.0 : 0.0,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Color(0xFF2E74FF),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.check,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              top: 4,
+              right: 4,
+              child: GestureDetector(
+                onTap: onRemove,
+                child: Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withValues(alpha: 0.4),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.close,
+                    size: 14,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            Positioned(
+              left: 10,
+              right: 10,
+              bottom: 10,
+              child: Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.2,
+                ),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -1821,7 +1970,6 @@ class _SendSettingsPageState extends State<_SendSettingsPage> {
   Widget _buildPhotoSourceGrid() {
     return Column(
       children: PhotoPickSource.values.map((source) {
-        final selected = _selectedPhotoSource == source;
         return RadioListTile<PhotoPickSource>(
           value: source,
           groupValue: _selectedPhotoSource,
@@ -1971,7 +2119,7 @@ class _SendSettingsPageState extends State<_SendSettingsPage> {
             else FilledButton(onPressed: canSaveAndRun ? _saveAndRunSelfTest : null, child: const Text('Проверить доступ')),
             if (hasSelfTestError || selfTestSucceeded == true) ...[
               const SizedBox(height: 12),
-              _SmtpResultBanner(success: selfTestSucceeded == true, message: hasSelfTestError ? selfTestError! : 'Доступ подтвержден', updatedAt: selfTestUpdatedAtText),
+              _SmtpResultBanner(success: selfTestSucceeded == true, message: hasSelfTestError ? selfTestError : 'Доступ подтвержден', updatedAt: selfTestUpdatedAtText),
             ],
             if (hasSelfTestError) ...[
               const SizedBox(height: 10),
