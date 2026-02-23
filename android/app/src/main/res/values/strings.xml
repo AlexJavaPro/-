@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ФотоПочта</string>
+    <string name="sending_notification_title">ФотоПочта</string>
+    <string name="sending_notification_channel">Отправка фото</string>
+    <string name="sending_result_notification_channel">Результат отправки</string>
+    <string name="sending_result_success">Отправка завершена успешно</string>
+    <string name="sending_result_error">Ошибка отправки: %1$s</string>
+    <string name="accessibility_service_description">Автоклик кнопки отправки в Яндекс Почте</string>
+    <string name="share_automation_channel">Автоматизация отправки</string>
+</resources>
+

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "918945082791",
+    "project_id": "alex-52958",
+    "storage_bucket": "alex-52958.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:918945082791:android:7ea60643017ece8c1b1a82",
+        "android_client_info": {
+          "package_name": "build.gradle"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyB8s3rR8TEOStLJ6w26hgHl9sLvQ_g9mvU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

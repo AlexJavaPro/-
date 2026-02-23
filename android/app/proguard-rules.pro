@@ -1,0 +1,6 @@
+-keep class jakarta.mail.** { *; }
+-keep class org.eclipse.angus.mail.** { *; }
+-keep class org.eclipse.angus.activation.** { *; }
+-keep class com.yandex.authsdk.** { *; }
+-dontwarn jakarta.activation.**
+-dontwarn jakarta.mail.**
